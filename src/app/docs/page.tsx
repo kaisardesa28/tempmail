@@ -6,7 +6,7 @@ import { Footer } from '@/components/Footer';
 import { Language } from '@/lib/i18n';
 import { Copy, Check, Terminal, ExternalLink } from 'lucide-react';
 
-const STORAGE_LANG_KEY = 'pakmail_lang';
+const STORAGE_LANG_KEY = 'setomail_lang';
 
 export default function DocsPage() {
   const [lang, setLang] = useState<Language>('id');
@@ -48,12 +48,12 @@ export default function DocsPage() {
             Public API
           </span>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            {lang === 'id' ? 'Dokumentasi API PakMail' : 'PakMail Public API Documentation'}
+            {lang === 'id' ? 'Dokumentasi API SetoMail' : 'SetoMail Public API Documentation'}
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             {lang === 'id'
-              ? 'PakMail menyediakan API publik gratis untuk membuat alamat email sementara dan membaca pesan yang masuk. API ini adalah proxy tanpa status (stateless) — token disimpan di sisi klien Anda.'
-              : 'PakMail provides a free public API to generate disposable email addresses and read incoming messages. This API is stateless — tokens are managed on the client side.'}
+              ? 'SetoMail menyediakan API publik gratis untuk membuat alamat email sementara dan membaca pesan yang masuk. API ini adalah proxy tanpa status (stateless) — token disimpan di sisi klien Anda.'
+              : 'SetoMail provides a free public API to generate disposable email addresses and read incoming messages. This API is stateless — tokens are managed on the client side.'}
           </p>
         </header>
 

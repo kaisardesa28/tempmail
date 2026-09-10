@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({ lang, onLanguageChange }) => {
             </svg>
           </span>
           <span className="text-lg font-bold tracking-tight text-slate-900">
-            Pak<span className="text-indigo-600">Mail</span>
+            Seto<span className="text-indigo-600">Mail</span>
           </span>
         </Link>
 

@@ -3,7 +3,7 @@ export type Language = 'id' | 'en';
 export const translations = {
   id: {
     // Header
-    brand: 'PakMail',
+    brand: 'SetoMail',
     home: 'Beranda',
     docs: 'Dokumentasi',
     language: 'Bahasa',
@@ -101,7 +101,7 @@ export const translations = {
         desc: 'Pesan masuk langsung tampil di inbox. Hapus alamat kapan saja, tidak ada jejak.',
       },
     ],
-    features_why: 'Kenapa PakMail?',
+    features_why: 'Kenapa SetoMail?',
     features_list: [
       {
         title: 'Instan & gratis',
@@ -130,7 +130,7 @@ export const translations = {
   },
   en: {
     // Header
-    brand: 'PakMail',
+    brand: 'SetoMail',
     home: 'Home',
     docs: 'Documentation',
     language: 'Language',
@@ -227,7 +227,7 @@ export const translations = {
         desc: 'Incoming emails appear directly in your inbox. Delete the address anytime, leaving zero trace.',
       },
     ],
-    features_why: 'Why PakMail?',
+    features_why: 'Why SetoMail?',
     features_list: [
       {
         title: 'Instant & free',

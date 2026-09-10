@@ -478,15 +478,15 @@ export function sendSimulatedTestEmail(
     message = {
       id: msgId,
       mailboxAddress: normAddress,
-      from: 'PakMail Team <welcome@pakmail.dev>',
-      fromEmail: 'welcome@pakmail.dev',
+      from: 'SetoMail Team <welcome@setomail.dev>',
+      fromEmail: 'welcome@setomail.dev',
       to: normAddress,
       subject: 'Selamat Datang di Layanan Email Sementara Anda!',
       bodyPreview: `Alamat email sementara Anda (${normAddress}) telah berhasil diaktifkan dan siap menerima email...`,
       bodyText: `Selamat Datang!\n\nAlamat email Anda (${normAddress}) siap digunakan untuk menjaga privasi Anda dari spam.\n\nSelamat beraktivitas!`,
       bodyHtml: `
         <div style="font-family: sans-serif; padding: 20px; background: #f8fafc; border-radius: 12px;">
-          <h2 style="color: #4f46e5;">Selamat Datang di PakMail!</h2>
+          <h2 style="color: #4f46e5;">Selamat Datang di SetoMail!</h2>
           <p>Alamat email Anda <b>${normAddress}</b> kini aktif dan siap menerima pesan dari layanan manapun.</p>
         </div>
       `,

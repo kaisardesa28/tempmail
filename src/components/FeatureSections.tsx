@@ -35,7 +35,7 @@ export const FeatureSections: React.FC<FeatureSectionsProps> = ({ lang }) => {
         </div>
       </section>
 
-      {/* Why PakMail Section */}
+      {/* Why SetoMail Section */}
       <section className="mt-12">
         <h2 className="text-center text-xl font-bold text-slate-900">{t.features_why}</h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">

@@ -35,7 +35,7 @@ export const Footer: React.FC<FooterProps> = ({ lang }) => {
             <path d="M6 17h4" stroke="white" strokeWidth="2" strokeLinecap="round" />
           </svg>
           <span>
-            <strong className="font-semibold text-slate-700">PakMail</strong> — {t.footer_text}
+            <strong className="font-semibold text-slate-700">SetoMail</strong> — {t.footer_text}
           </span>
         </div>
 

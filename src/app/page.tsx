@@ -14,8 +14,8 @@ import { Mailbox, MessageSummary } from '@/lib/types';
 import { Language, translations } from '@/lib/i18n';
 import { Zap, ShieldCheck } from 'lucide-react';
 
-const STORAGE_MAILBOX_KEY = 'pakmail_current_mailbox';
-const STORAGE_LANG_KEY = 'pakmail_lang';
+const STORAGE_MAILBOX_KEY = 'setomail_current_mailbox';
+const STORAGE_LANG_KEY = 'setomail_lang';
 
 export default function HomePage() {
   const [lang, setLang] = useState<Language>('id');

@@ -9,7 +9,7 @@ interface SharePageProps {
   params: Promise<{ domain: string; name: string }>;
 }
 
-const STORAGE_MAILBOX_KEY = 'pakmail_current_mailbox';
+const STORAGE_MAILBOX_KEY = 'setomail_current_mailbox';
 
 export default function SharePage({ params }: SharePageProps) {
   const { domain, name } = use(params);

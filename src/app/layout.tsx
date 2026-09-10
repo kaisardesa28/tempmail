@@ -2,12 +2,12 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'PakMail — Email Sementara Instan',
+  title: 'SetoMail — Email Sementara Instan',
   description:
     'Buat email sementara gratis tanpa daftar. Lindungi inbox utama dari spam — dengan API publik ber-dokumentasi.',
-  keywords: ['temp mail', 'email sementara', 'disposable email', 'pakmail', 'temporary email'],
+  keywords: ['temp mail', 'email sementara', 'disposable email', 'setomail', 'temporary email'],
   openGraph: {
-    title: 'PakMail — Email Sementara Instan',
+    title: 'SetoMail — Email Sementara Instan',
     description: 'Email sementara gratis tanpa daftar, dengan API publik ber-dokumentasi.',
     type: 'website',
   },

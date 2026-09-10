@@ -4,7 +4,7 @@ import { SERVICE_CONFIGS } from '@/lib/email-service';
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    service: 'PakMail',
+    service: 'SetoMail',
     baseUrl: '/api',
     services: SERVICE_CONFIGS,
     rateLimit: {
