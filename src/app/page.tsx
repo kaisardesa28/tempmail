@@ -1,69 +1,261 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect, useCallback } from 'react';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
+import { MailboxCreator } from '@/components/MailboxCreator';
+import { MailboxCard } from '@/components/MailboxCard';
+import { InboxList } from '@/components/InboxList';
+import { MessageDrawer } from '@/components/MessageDrawer';
+import { QrCodeModal } from '@/components/QrCodeModal';
+import { ShareModal } from '@/components/ShareModal';
+import { FeatureSections } from '@/components/FeatureSections';
+import { Mailbox, MessageSummary } from '@/lib/types';
+import { Language, translations } from '@/lib/i18n';
+import { Zap, ShieldCheck } from 'lucide-react';
+
+const STORAGE_MAILBOX_KEY = 'pakmail_current_mailbox';
+const STORAGE_LANG_KEY = 'pakmail_lang';
+
+export default function HomePage() {
+  const [lang, setLang] = useState<Language>('id');
+  const [mailbox, setMailbox] = useState<Mailbox | null>(null);
+  const [messages, setMessages] = useState<MessageSummary[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<MessageSummary | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const t = translations[lang];
+
+  // Load language and active mailbox from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedLang = localStorage.getItem(STORAGE_LANG_KEY) as Language;
+      if (savedLang === 'id' || savedLang === 'en') {
+        setLang(savedLang);
+      }
+      const savedMailbox = localStorage.getItem(STORAGE_MAILBOX_KEY);
+      if (savedMailbox) {
+        setMailbox(JSON.parse(savedMailbox));
+      }
+    } catch {
+      // Ignore localStorage error
+    }
+    setMounted(true);
+  }, []);
+
+  // Save language changes
+  const handleLanguageChange = (newLang: Language) => {
+    setLang(newLang);
+    try {
+      localStorage.setItem(STORAGE_LANG_KEY, newLang);
+    } catch {}
+  };
+
+  // Save mailbox changes
+  const saveMailbox = (mb: Mailbox | null) => {
+    setMailbox(mb);
+    try {
+      if (mb) {
+        localStorage.setItem(STORAGE_MAILBOX_KEY, JSON.stringify(mb));
+      } else {
+        localStorage.removeItem(STORAGE_MAILBOX_KEY);
+      }
+    } catch {}
+  };
+
+  // Fetch messages for active mailbox
+  const fetchMessages = useCallback(async () => {
+    if (!mailbox) return;
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(
+        `/api/mailboxes/${mailbox.id}/messages?service=${mailbox.serviceId}&token=${encodeURIComponent(
+          mailbox.token
+        )}`
+      );
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.messages)) {
+        setMessages(data.messages);
+      }
+    } catch {
+      // Ignore network errors during polling
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [mailbox]);
+
+  // Trigger fetch messages whenever active mailbox changes
+  useEffect(() => {
+    if (mailbox) {
+      fetchMessages();
+    } else {
+      setMessages([]);
+    }
+  }, [mailbox, fetchMessages]);
+
+  const handleMailboxCreated = (newMb: Mailbox) => {
+    saveMailbox(newMb);
+    setIsCreatorOpen(false);
+  };
+
+  const handleDeleteMailbox = () => {
+    if (!mailbox) return;
+    if (window.confirm(t.delete_confirm)) {
+      fetch(`/api/mailboxes/${mailbox.id}?service=${mailbox.serviceId}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+      saveMailbox(null);
+      setMessages([]);
+      setSelectedMessage(null);
+    }
+  };
+
+  const handleDeleteMessage = (msgId: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!mailbox) return;
+    try {
+      const res = await fetch(`/api/mailboxes/${mailbox.id}/send-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'verification' }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await fetchMessages();
+      }
+    } catch {
+      // Error handling
+    }
+  };
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        <header className="h-16 border-b border-slate-200/70 bg-white/80" />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="flex min-h-screen flex-col bg-slate-50">
+      <Header lang={lang} onLanguageChange={handleLanguageChange} />
+
+      <main className="mx-auto flex-1 max-w-5xl px-4 pb-12 sm:px-6 w-full">
+        {/* Hero Section */}
+        <section className="pb-8 pt-8 text-center sm:pt-12">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 shadow-xs">
+            <Zap className="h-3.5 w-3.5" />
+            {t.badge}
+          </span>
+
+          <h1 className="mx-auto mt-4 max-w-2xl text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
+            {t.hero_title_1}{' '}
+            <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+              {t.hero_title_2}
+            </span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="mx-auto mt-3 max-w-xl text-xs sm:text-sm leading-relaxed text-slate-500 sm:text-base">
+            {t.hero_subtitle}
           </p>
+        </section>
+
+        {/* Mailbox Section */}
+        <div className="mx-auto max-w-2xl">
+          {!mailbox || isCreatorOpen ? (
+            <div className="space-y-4">
+              <MailboxCreator
+                lang={lang}
+                onCreated={handleMailboxCreated}
+                defaultService={mailbox?.serviceId || 'server-1'}
+              />
+              {mailbox && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatorOpen(false)}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-800 underline"
+                  >
+                    Batal dan kembali ke alamat aktif
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <MailboxCard
+                mailbox={mailbox}
+                lang={lang}
+                onRefresh={fetchMessages}
+                onNew={() => setIsCreatorOpen(true)}
+                onDelete={handleDeleteMailbox}
+                onShowQr={() => setShowQrModal(true)}
+                onShowShare={() => setShowShareModal(true)}
+                onSendTestEmail={handleSendTestEmail}
+                isRefreshing={isRefreshing}
+              />
+
+              {/* Inbox list */}
+              <InboxList
+                messages={messages}
+                lang={lang}
+                onSelectMessage={(msg) => setSelectedMessage(msg)}
+                isLoading={isRefreshing}
+              />
+            </div>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        {/* Security / Privacy Warning */}
+        <p className="mx-auto mt-8 flex max-w-xl items-center justify-center gap-2 text-center text-xs text-slate-500">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400" />
+          <span>{t.security_note}</span>
+        </p>
+
+        {/* Informational Feature Sections */}
+        <FeatureSections lang={lang} />
       </main>
+
+      {/* Message Detail Drawer / Modal */}
+      {mailbox && selectedMessage && (
+        <MessageDrawer
+          mailbox={mailbox}
+          messageSummary={selectedMessage}
+          lang={lang}
+          onClose={() => setSelectedMessage(null)}
+          onDeleteMessage={handleDeleteMessage}
+        />
+      )}
+
+      {/* QR Code Modal */}
+      {mailbox && showQrModal && (
+        <QrCodeModal
+          mailbox={mailbox}
+          lang={lang}
+          onClose={() => setShowQrModal(false)}
+        />
+      )}
+
+      {/* Share Mailbox Modal */}
+      {mailbox && showShareModal && (
+        <ShareModal
+          mailbox={mailbox}
+          lang={lang}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
+
+      <Footer lang={lang} />
     </div>
   );
 }
