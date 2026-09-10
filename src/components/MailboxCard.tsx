@@ -11,6 +11,8 @@ import {
   Trash2,
   Send,
   Loader2,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 import { Mailbox } from '@/lib/types';
 import { Language, translations } from '@/lib/i18n';
@@ -44,6 +46,8 @@ export const MailboxCard: React.FC<MailboxCardProps> = ({
 
   const [copied, setCopied] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [savingToAdmin, setSavingToAdmin] = useState(false);
+  const [savedToAdmin, setSavedToAdmin] = useState(false);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
   const [isTabActive, setIsTabActive] = useState(true);
 
@@ -112,6 +116,45 @@ export const MailboxCard: React.FC<MailboxCardProps> = ({
     }
   };
 
+  const handleSaveToAdmin = async () => {
+    const label = window.prompt(
+      lang === 'id'
+        ? 'Beri label / nama akun ini untuk disimpan di dashboard Admin:'
+        : 'Enter a label / account name to save in the Admin dashboard:',
+      'Akun Pantauan'
+    );
+    if (label === null) return;
+
+    setSavingToAdmin(true);
+    try {
+      const res = await fetch('/api/admin/mailboxes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'setomail2026',
+        },
+        body: JSON.stringify({
+          address: mailbox.address,
+          token: mailbox.token,
+          serviceId: mailbox.serviceId,
+          label: label || 'Akun Pantauan',
+          adminPassword: 'setomail2026',
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSavedToAdmin(true);
+        setTimeout(() => setSavedToAdmin(false), 3000);
+      } else {
+        alert(data.error?.message || 'Gagal menyimpan ke admin.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setSavingToAdmin(false);
+    }
+  };
+
   const progressPercent = ((REFRESH_INTERVAL_SEC - countdown) / REFRESH_INTERVAL_SEC) * 100;
 
   return (
@@ -168,7 +211,7 @@ export const MailboxCard: React.FC<MailboxCardProps> = ({
       </div>
 
       {/* Action Buttons Grid */}
-      <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
         {/* Copy Address Button */}
         <button
           type="button"
@@ -207,6 +250,31 @@ export const MailboxCard: React.FC<MailboxCardProps> = ({
         >
           <Share2 className="h-4 w-4 text-slate-500" />
           <span>{t.share_link}</span>
+        </button>
+
+        {/* Save to Admin Button */}
+        <button
+          type="button"
+          onClick={handleSaveToAdmin}
+          disabled={savingToAdmin}
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition active:scale-95 ${
+            savedToAdmin
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+              : 'border-indigo-200 bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100/70'
+          }`}
+          title="Simpan email ini ke Dashboard Admin agar bisa diakses terus-menerus"
+        >
+          {savedToAdmin ? (
+            <>
+              <BookmarkCheck className="h-4 w-4 text-emerald-600" />
+              <span>Tersimpan!</span>
+            </>
+          ) : (
+            <>
+              <Bookmark className="h-4 w-4 text-indigo-600" />
+              <span>Simpan Admin</span>
+            </>
+          )}
         </button>
 
         {/* Send Test Email Button */}
