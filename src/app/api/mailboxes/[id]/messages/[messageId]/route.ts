@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMessageDetailForMailbox } from '@/lib/email-service';
+import { ServiceId } from '@/lib/types';
 
 export async function GET(
   request: NextRequest,
@@ -15,8 +16,10 @@ export async function GET(
     token = authHeader.slice(7).trim();
   }
 
+  const service = (searchParams.get('service') as ServiceId) || 'server-1';
+
   try {
-    const message = await getMessageDetailForMailbox(address, messageId, token);
+    const message = await getMessageDetailForMailbox(address, messageId, token, service);
     if (!message) {
       return NextResponse.json(
         {

@@ -1,15 +1,13 @@
 import crypto from 'crypto';
 import { Mailbox, MessageDetail, MessageSummary, ServiceConfig, ServiceId } from './types';
 
-// In-memory store for mailboxes and test/local messages
-// (Ensures rapid response, local fallback, and testing capabilities)
+const UPSTREAM_BASE_URL = 'https://pakmail.vercel.app/api';
+
 interface StoredMailbox {
   id: string;
   serviceId: ServiceId;
   address: string;
   token: string;
-  mailTmPassword?: string;
-  mailTmToken?: string;
   createdAt: string;
 }
 
@@ -81,7 +79,6 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
   },
 ];
 
-// Fallback domains
 const DEFAULT_DOMAINS: Record<ServiceId, string[]> = {
   'server-1': [
     'ozsaip.com',
@@ -92,12 +89,11 @@ const DEFAULT_DOMAINS: Record<ServiceId, string[]> = {
     'olipii.com',
     'ooynib.com',
   ],
-  'server-2': ['catchmail.io', 'inboxproxy.dev', 'tempinbox.org'],
-  'server-3': ['tempbox.live', 'burnermail.co', 'privatemail.link'],
+  'server-2': ['catchmail.io'],
+  'server-3': ['tempbox.live', 'burnermail.co'],
   gmail: ['gmail.temp.net', 'googlemail.temp-inbox.com'],
 };
 
-// Generate 12-character lowercase alphanumeric token
 export function generateToken(): string {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
   let token = '';
@@ -108,7 +104,6 @@ export function generateToken(): string {
   return token;
 }
 
-// Generate random friendly username prefix
 export function generateRandomUsername(): string {
   const adjectives = [
     'swift',
@@ -145,25 +140,23 @@ export function generateRandomUsername(): string {
 }
 
 export async function fetchDomainsForService(serviceId: ServiceId): Promise<string[]> {
-  if (serviceId === 'server-1') {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch('https://api.mail.tm/domains', {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        const domains = data['hydra:member']?.map((d: { domain: string }) => d.domain) || [];
-        if (domains.length > 0) {
-          return Array.from(new Set([...domains, ...DEFAULT_DOMAINS['server-1']]));
-        }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`${UPSTREAM_BASE_URL}/domains?service=${serviceId}`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.domains) && data.domains.length > 0) {
+        return data.domains;
       }
-    } catch {
-      // Fallback
     }
+  } catch {
+    // Fallback
   }
 
   return DEFAULT_DOMAINS[serviceId] || DEFAULT_DOMAINS['server-1'];
@@ -174,6 +167,50 @@ export async function createNewMailbox(
   customName?: string,
   customDomain?: string
 ): Promise<Mailbox> {
+  // First attempt: create on real upstream live service so MX records are active for TunnelBear, etc.
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const bodyPayload: { service: string; name?: string; domain?: string } = {
+      service: serviceId,
+    };
+    if (customName && customName.trim()) {
+      bodyPayload.name = customName.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    }
+    if (customDomain) {
+      bodyPayload.domain = customDomain;
+    }
+
+    const res = await fetch(`${UPSTREAM_BASE_URL}/mailboxes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && data.mailbox) {
+        const mb: Mailbox = data.mailbox;
+        mailboxesStore.set(mb.address.toLowerCase(), {
+          id: mb.id,
+          serviceId: (mb.serviceId as ServiceId) || serviceId,
+          address: mb.address,
+          token: mb.token,
+          createdAt: mb.createdAt || new Date().toISOString(),
+        });
+        return mb;
+      }
+    }
+  } catch {
+    // Fallback to local generation if upstream is temporarily unreachable
+  }
+
+  // Fallback generation
   const domains = await fetchDomainsForService(serviceId);
   const domain = customDomain && domains.includes(customDomain) ? customDomain : domains[0];
   const username = customName
@@ -184,7 +221,6 @@ export async function createNewMailbox(
   const token = generateToken();
   const id = encodeURIComponent(address);
   const createdAt = new Date().toISOString();
-
   const serviceConfig = SERVICE_CONFIGS.find((s) => s.id === serviceId) || SERVICE_CONFIGS[0];
 
   const mailbox: Mailbox = {
@@ -198,43 +234,11 @@ export async function createNewMailbox(
     service: serviceConfig.label,
   };
 
-  // Try creating on live mail.tm if domain matches mail.tm
-  let mailTmPassword = '';
-  let mailTmToken = '';
-  try {
-    mailTmPassword = crypto.randomBytes(16).toString('hex');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const createRes = await fetch('https://api.mail.tm/accounts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, password: mailTmPassword }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (createRes.ok) {
-      const tokenRes = await fetch('https://api.mail.tm/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, password: mailTmPassword }),
-      });
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
-        mailTmToken = tokenData.token;
-      }
-    }
-  } catch {
-    // Local fallback works seamlessly
-  }
-
   mailboxesStore.set(address, {
     id,
     serviceId,
     address,
     token,
-    mailTmPassword,
-    mailTmToken,
     createdAt,
   });
 
@@ -248,7 +252,6 @@ export function getStoredMailbox(address: string): StoredMailbox | undefined {
 export function verifyMailboxToken(address: string, token?: string | null): boolean {
   const stored = mailboxesStore.get(address.toLowerCase());
   if (!stored) {
-    // If not in memory (e.g. serverless stateless request), check token format (12 alphanumeric)
     return Boolean(token && token.length >= 8);
   }
   if (!token) return false;
@@ -262,72 +265,55 @@ export async function getMessagesForMailbox(
 ): Promise<MessageSummary[]> {
   const normAddress = address.toLowerCase();
   const stored = mailboxesStore.get(normAddress);
+  const effectiveToken = token || stored?.token || '';
 
-  // If live mail.tm token exists, fetch live messages
-  if (stored?.mailTmToken) {
-    try {
-      const res = await fetch('https://api.mail.tm/messages', {
-        headers: {
-          Authorization: `Bearer ${stored.mailTmToken}`,
-          Accept: 'application/json',
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const liveMessages: MessageSummary[] = (data['hydra:member'] || []).map(
-          (m: {
-            id: string;
-            from: { name: string; address: string };
-            subject: string;
-            intro: string;
-            createdAt: string;
-            hasAttachments: boolean;
-            attachments?: { filename: string; size: number; contentType: string }[];
-          }) => ({
+  const realMessages: MessageSummary[] = [];
+
+  // Query real upstream service (where TunnelBear / external emails actually land)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const encodedId = encodeURIComponent(normAddress);
+    const url = `${UPSTREAM_BASE_URL}/mailboxes/${encodedId}/messages?service=${serviceId}${
+      effectiveToken ? `&token=${encodeURIComponent(effectiveToken)}` : ''
+    }`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        ...(effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {}),
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.messages)) {
+        for (const m of data.messages) {
+          realMessages.push({
             id: m.id,
-            from: m.from.name ? `${m.from.name} <${m.from.address}>` : m.from.address,
-            fromEmail: m.from.address,
-            to: normAddress,
+            from: m.from || m.fromEmail || 'Unknown',
+            fromEmail: m.fromEmail || m.from || 'unknown@domain.com',
+            to: m.to || normAddress,
             subject: m.subject || '(Tanpa Subjek)',
-            bodyPreview: m.intro || '',
-            receivedAt: Math.floor(new Date(m.createdAt).getTime() / 1000),
-            attachments: (m.attachments || []).map((a) => ({
-              name: a.filename,
-              size: a.size,
-              contentType: a.contentType,
-            })),
-            attachmentsCount: m.hasAttachments ? (m.attachments?.length || 1) : 0,
-          })
-        );
-
-        // Merge with any local test messages
-        const local = messagesStore.get(normAddress) || [];
-        const localSummaries: MessageSummary[] = local.map((m) => ({
-          id: m.id,
-          from: m.from,
-          fromEmail: m.fromEmail,
-          to: m.to,
-          subject: m.subject,
-          bodyPreview: m.bodyPreview,
-          bodyText: m.bodyText,
-          bodyHtml: m.bodyHtml,
-          receivedAt: m.receivedAt,
-          attachments: m.attachments,
-          attachmentsCount: m.attachments.length,
-        }));
-
-        const all = [...localSummaries, ...liveMessages];
-        all.sort((a, b) => b.receivedAt - a.receivedAt);
-        return all;
+            bodyPreview: m.bodyPreview || '',
+            bodyText: m.bodyText || '',
+            bodyHtml: m.bodyHtml || null,
+            receivedAt: typeof m.receivedAt === 'number' ? m.receivedAt : Math.floor(Date.now() / 1000),
+            attachments: Array.isArray(m.attachments) ? m.attachments : [],
+            attachmentsCount: typeof m.attachmentsCount === 'number' ? m.attachmentsCount : (m.attachments?.length || 0),
+          });
+        }
       }
-    } catch {
-      // Fallback to local
     }
+  } catch {
+    // Upstream fetch failed, continue with local
   }
 
-  // Local / Test messages
-  const local = messagesStore.get(normAddress) || [];
-  return local.map((m) => ({
+  // Merge with any local test messages created via "Kirim Email Tes" button
+  const localList = messagesStore.get(normAddress) || [];
+  const localSummaries: MessageSummary[] = localList.map((m) => ({
     id: m.id,
     from: m.from,
     fromEmail: m.fromEmail,
@@ -340,17 +326,31 @@ export async function getMessagesForMailbox(
     attachments: m.attachments,
     attachmentsCount: m.attachments.length,
   }));
+
+  // Combine and deduplicate by id
+  const seenIds = new Set<string>();
+  const combined: MessageSummary[] = [];
+
+  for (const msg of [...realMessages, ...localSummaries]) {
+    if (!seenIds.has(msg.id)) {
+      seenIds.add(msg.id);
+      combined.push(msg);
+    }
+  }
+
+  combined.sort((a, b) => b.receivedAt - a.receivedAt);
+  return combined;
 }
 
 export async function getMessageDetailForMailbox(
   address: string,
   messageId: string,
-  token?: string | null
+  token?: string | null,
+  serviceId: ServiceId = 'server-1'
 ): Promise<MessageDetail | null> {
   const normAddress = address.toLowerCase();
-  const stored = mailboxesStore.get(normAddress);
 
-  // Check local messages first
+  // 1. Check local messages first (if sent via test email button)
   const localList = messagesStore.get(normAddress) || [];
   const localMsg = localList.find((m) => m.id === messageId);
   if (localMsg) {
@@ -368,41 +368,47 @@ export async function getMessageDetailForMailbox(
     };
   }
 
-  // Check live mail.tm
-  if (stored?.mailTmToken) {
-    try {
-      const res = await fetch(`https://api.mail.tm/messages/${messageId}`, {
-        headers: {
-          Authorization: `Bearer ${stored.mailTmToken}`,
-          Accept: 'application/json',
-        },
-      });
-      if (res.ok) {
-        const m = await res.json();
+  // 2. Fetch from real upstream service (where TunnelBear email is stored)
+  const stored = mailboxesStore.get(normAddress);
+  const effectiveToken = token || stored?.token || '';
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const encodedId = encodeURIComponent(normAddress);
+    const url = `${UPSTREAM_BASE_URL}/mailboxes/${encodedId}/messages/${messageId}?service=${serviceId}${
+      effectiveToken ? `&token=${encodeURIComponent(effectiveToken)}` : ''
+    }`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        ...(effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {}),
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && data.message) {
+        const m = data.message;
         return {
           id: m.id,
-          from: m.from.name ? `${m.from.name} <${m.from.address}>` : m.from.address,
-          fromEmail: m.from.address,
-          to: normAddress,
+          from: m.from || 'Unknown',
+          fromEmail: m.fromEmail,
+          to: m.to || normAddress,
           subject: m.subject || '(Tanpa Subjek)',
-          bodyHtml: Array.isArray(m.html) ? m.html.join('') : m.html || null,
-          bodyText: m.text || '',
-          receivedAt: Math.floor(new Date(m.createdAt).getTime() / 1000),
-          attachments: (m.attachments || []).map(
-            (a: { id: string; filename: string; size: number; contentType: string; downloadUrl?: string }) => ({
-              id: a.id,
-              name: a.filename,
-              size: a.size,
-              contentType: a.contentType,
-              url: a.downloadUrl,
-            })
-          ),
-          attachmentsCount: m.attachments?.length || 0,
+          bodyHtml: m.bodyHtml || null,
+          bodyText: m.bodyText || '',
+          receivedAt: typeof m.receivedAt === 'number' ? m.receivedAt : Math.floor(Date.now() / 1000),
+          attachments: Array.isArray(m.attachments) ? m.attachments : [],
+          attachmentsCount: typeof m.attachmentsCount === 'number' ? m.attachmentsCount : (m.attachments?.length || 0),
         };
       }
-    } catch {
-      // Fallback
     }
+  } catch {
+    // Error
   }
 
   return null;
@@ -495,9 +501,17 @@ export function sendSimulatedTestEmail(
   return message;
 }
 
-export function deleteStoredMailbox(address: string): boolean {
+export function deleteStoredMailbox(address: string, serviceId?: ServiceId, token?: string): boolean {
   const normAddress = address.toLowerCase();
   mailboxesStore.delete(normAddress);
   messagesStore.delete(normAddress);
+
+  if (serviceId && token) {
+    const encodedId = encodeURIComponent(normAddress);
+    fetch(`${UPSTREAM_BASE_URL}/mailboxes/${encodedId}?service=${serviceId}&token=${encodeURIComponent(token)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  }
+
   return true;
 }
